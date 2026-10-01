@@ -1,0 +1,20 @@
+seed: 42
+environment:
+  rows: 20
+  columns: 10
+  preview_pieces: 5
+  allow_hold: true
+  randomizer: seven_bag
+  max_steps: null
+experiment:
+  train_steps: 1000000
+  evaluation_episodes: 100
+  evaluation_seeds_start: 10000
+  output_dir: experiments/default
+metrics:
+  - episode_reward
+  - lines_cleared
+  - pieces_placed
+  - score
+  - holes
+  - max_height

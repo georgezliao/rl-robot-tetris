@@ -1,12 +1,82 @@
-Plan for the project:
+# RL Robot Tetris
 
-Integrate a self-made tetris game into an RL loop. I want test theory and compare the Deep RL Approach (Raw Board Grid) and also the Heuristic, matrix-based, approach.
+An experimental Tetris environment for comparing agents that learn from the raw
+board with agents that learn from engineered board features.
 
-High Level Design:
-- Follows a state, reward, done, info = env.step(action) system.
-- Deep RL Approach will just take the tetris game through a CNN and train based on the image itself, philosophically, one could say this is more like what a human would see. 
-- To maximize the effectiveness of the robot, there are a couple features that we can train our little robot to do: 1. Calculate the number of lines one action clears (and maybe even the second line). 2. The number of holes one action results in 3. And more?
-(Regarding the above, we won't be telling or giving an algorithm to the agent, the agent will only be aware that they should focus on those things, but they won't know HOW/in what proportion to do those actions.)
-- I guess, on that note, it would be interesting to compare the performance to already established algorithms like MisaMino which uses a Beam Search algorithm, and Cold Clear which uses a Monte Carlo Tree Search.
-- The next choice is simply an experimental design aesthetic choice, we could either allow the agent to just choose the orientation and where to place it and it'll place it. Or we can challenge it and only give it the controls. The latter would be more complicated but in my opinion fits more in the spirit of good RL.
+## Research questions
+
+1. How does a CNN trained on a raw board grid compare with a feature-based model?
+2. How much does reward shaping (lines, holes, height, and bumpiness) help?
+3. How does choosing a final placement compare with issuing one controller input
+   at a time?
+4. How do learned policies compare with search baselines such as beam search and
+   Monte Carlo tree search?
+
+The game engine is shared by every experiment so the observation, action, and
+reward choices can be varied independently.
+
+## Layout
+
+```text
+configs/                 Experiment configuration
+experiments/             Saved run metadata (large outputs are ignored)
+notebooks/               Exploration and result analysis
+scripts/                 Command-line entry points
+src/tetris_rl/
+  core/                  Board, pieces, randomizer, and game rules
+  envs/                  RL API and the two action-mode environments
+  observations/          Raw-grid and engineered-feature encoders
+  rewards/               Sparse and shaped reward definitions
+  agents/                Random, deep-RL, and heuristic policies
+  search/                Beam-search and MCTS baselines
+  training/              Training, evaluation, and metrics orchestration
+tests/
+  unit/                  Rules, encoders, and reward tests
+  integration/           Environment contract and reproducibility tests
+```
+
+## Environment contract
+
+The project deliberately exposes the requested four-value API:
+
+```python
+observation = env.reset(seed=42)
+observation, reward, done, info = env.step(action)
+```
+
+Two action modes are planned:
+
+- `placement`: choose rotation and column; the environment hard-drops the piece.
+- `control`: choose left, right, rotate, soft drop, hard drop, or no-op each tick.
+
+Two primary observation modes are planned:
+
+- `raw_grid`: board channels suitable for a CNN.
+- `features`: lines cleared, holes, aggregate/max height, bumpiness, wells, and
+  related landing features. These measurements are inputs, not a hand-authored
+  rule for how the agent must combine them.
+
+## Getting started
+
+Requires Python 3.11 or newer.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+pytest
+```
+
+The scaffold currently defines the public contracts and a random baseline. The
+next milestone is implementing `core/` and then satisfying the environment
+contract tests for both action modes.
+
+## Experimental discipline
+
+- Use the same piece sequences and evaluation seeds across agents.
+- Keep observation, action-mode, and reward-shaping ablations separate.
+- Report lines, pieces, score, holes, and survival time—not reward alone.
+- Evaluate on held-out seeds and record wall-clock time and environment steps.
+- Treat external engines as separately configured reference baselines; do not
+  claim direct comparability until rules, previews, hold, and timing match.
 

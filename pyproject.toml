@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rl-robot-tetris"
+version = "0.1.0"
+description = "A reproducible testbed for raw-grid and feature-based Tetris agents"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+rl = ["torch>=2.2"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+tetris-train = "tetris_rl.training.train:main"
+tetris-evaluate = "tetris_rl.training.evaluate:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
