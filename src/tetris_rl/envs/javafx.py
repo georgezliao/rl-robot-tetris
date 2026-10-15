@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import selectors
 import subprocess
+from collections import deque
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -30,17 +32,29 @@ class JavaFxControlEnv:
         command: Sequence[str] | None = None,
         *,
         startup_timeout: float = 15.0,
+        observation_size: tuple[int, int] = (128, 96),
+        frame_stack: int = 4,
     ) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         default_command = [str(repo_root / "scripts" / "run_java_bridge.sh")]
         self.command = list(command or default_command)
         self.startup_timeout = startup_timeout
+        if observation_size[0] < 1 or observation_size[1] < 1:
+            raise ValueError("observation_size dimensions must be positive")
+        if frame_stack < 1:
+            raise ValueError("frame_stack must be positive")
+        self.observation_size = observation_size
+        self.frame_stack = frame_stack
+        self._frames: deque[Observation] = deque(maxlen=frame_stack)
         self._process: subprocess.Popen[str] | None = None
 
     def reset(self, seed: int | None = None) -> Observation:
         self._ensure_started()
         payload = self._request(f"RESET {0 if seed is None else seed}")
-        return self._observation(payload)
+        frame = self._decode_frame(payload)
+        self._frames.clear()
+        self._frames.extend(frame.copy() for _ in range(self.frame_stack))
+        return self._stacked_observation()
 
     def step(self, action: ControlAction | int) -> StepResult:
         action_id = int(action)
@@ -49,7 +63,8 @@ class JavaFxControlEnv:
 
         self._ensure_started()
         payload = self._request(f"STEP {action_id}")
-        observation = self._observation(payload)
+        self._frames.append(self._decode_frame(payload))
+        observation = self._stacked_observation()
         reward = float(payload["reward"])
         done = bool(payload["done"])
         info = self._info(payload)
@@ -144,12 +159,42 @@ class JavaFxControlEnv:
             return ""
         return process.stderr.read().strip()
 
-    @staticmethod
-    def _observation(payload: dict[str, Any]) -> Observation:
-        grid = np.asarray(payload["observation"], dtype=np.float32)
-        if grid.shape != (20, 10):
-            raise BridgeError(f"Expected a 20x10 board, received {grid.shape}")
-        return grid[np.newaxis, :, :]
+    def _decode_frame(self, payload: dict[str, Any]) -> Observation:
+        observation = payload.get("observation")
+        if not isinstance(observation, dict):
+            raise BridgeError("Bridge response is missing a visual observation")
+        if observation.get("encoding") != "rgb24-base64":
+            raise BridgeError(f"Unsupported frame encoding: {observation.get('encoding')}")
+
+        try:
+            width = int(observation["width"])
+            height = int(observation["height"])
+            channels = int(observation["channels"])
+            raw = base64.b64decode(observation["data"], validate=True)
+        except (KeyError, TypeError, ValueError) as exception:
+            raise BridgeError("Malformed visual observation") from exception
+
+        if width < 1 or height < 1 or channels != 3:
+            raise BridgeError(
+                f"Invalid visual dimensions: {width}x{height}x{channels}"
+            )
+        expected_bytes = width * height * channels
+        if len(raw) != expected_bytes:
+            raise BridgeError(
+                f"Expected {expected_bytes} RGB bytes, received {len(raw)}"
+            )
+
+        frame = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, channels)
+        output_height, output_width = self.observation_size
+        row_indices = np.linspace(0, height - 1, output_height).astype(np.intp)
+        column_indices = np.linspace(0, width - 1, output_width).astype(np.intp)
+        resized = frame[row_indices[:, None], column_indices[None, :]]
+        return np.transpose(resized, (2, 0, 1)).astype(np.float32) / 255.0
+
+    def _stacked_observation(self) -> Observation:
+        if len(self._frames) != self.frame_stack:
+            raise BridgeError("Frame stack is not initialized; call reset() first")
+        return np.concatenate(tuple(self._frames), axis=0)
 
     @staticmethod
     def _info(payload: dict[str, Any]) -> Info:

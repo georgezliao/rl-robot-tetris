@@ -19,10 +19,9 @@ class ControlAction(IntEnum):
     LEFT = 1
     RIGHT = 2
     ROTATE_CLOCKWISE = 3
-    ROTATE_COUNTERCLOCKWISE = 4
-    SOFT_DROP = 5
-    HARD_DROP = 6
-    HOLD = 7
+    SOFT_DROP = 4
+    HARD_DROP = 5
+    HOLD = 6
 
 
 @dataclass(frozen=True, slots=True)
