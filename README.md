@@ -67,9 +67,34 @@ pip install -e '.[dev]'
 pytest
 ```
 
-The scaffold currently defines the public contracts and a random baseline. The
-next milestone is implementing `core/` and then satisfying the environment
-contract tests for both action modes.
+The original JavaFX game in `tetris/` is connected to Python through a small,
+synchronous subprocess bridge. Real-time gravity is disabled for RL episodes so
+the board changes only when the agent acts, and the piece generator is seedable.
+
+Build the bridge and run a smoke episode with the random agent:
+
+```bash
+./scripts/build_java_bridge.sh
+PYTHONPATH=src python scripts/random_java_agent.py --seed 42
+```
+
+The bridge implements the controller action mode. The placement-level adapter
+and learned agent are separate next milestones.
+
+### Java bridge protocol
+
+`JavaFxControlEnv` starts one Java process and sends `RESET <seed>` or
+`STEP <action-id>` commands over standard input. Each command returns the raw
+20×10 board, reward, terminal flag, and episode metrics as JSON. It implements:
+
+```python
+with JavaFxControlEnv() as env:
+    observation = env.reset(seed=42)
+    observation, reward, done, info = env.step(ControlAction.HARD_DROP)
+```
+
+On macOS the scripts automatically use the installed Liberica Java 8 JDK. Set
+`JAVAFX_JAVA_HOME` when JavaFX is installed under a different JDK.
 
 ## Experimental discipline
 

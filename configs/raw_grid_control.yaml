@@ -1,6 +1,7 @@
 extends: base.yaml
 name: raw_grid_control
 environment:
+  backend: javafx_bridge
   action_mode: control
   observation_mode: raw_grid
 agent:
