@@ -109,7 +109,7 @@ On macOS the scripts automatically use the installed Liberica Java 8 JDK. Set
 
 - Use the same piece sequences and evaluation seeds across agents.
 - Keep observation, action-mode, and reward-shaping ablations separate.
-- Report lines, pieces, score, holes, and survival time—not reward alone.
+- Report lines, pieces, score, holes, and survival time and not just reward alone.
 - Evaluate on held-out seeds and record wall-clock time and environment steps.
 - Treat external engines as separately configured reference baselines; do not
   claim direct comparability until rules, previews, hold, and timing match.
