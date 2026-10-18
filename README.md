@@ -1,7 +1,7 @@
 # RL Robot Tetris
 
-An experimental Tetris environment for comparing agents that learn by watching
-and controlling the rendered game UI with agents that receive engineered state.
+This project is attending as an experimental environment on one of my favorite games, Tetris. I want to compare agents that learn by watching
+and controlling the rendered game UI with agents that receive engineered state, mainly to see what conditions agents learn fastest under.
 
 ## Research questions
 
@@ -37,7 +37,7 @@ tests/
 
 ## Environment contract
 
-The project deliberately exposes the requested four-value API:
+The project exposes the requested four-value API:
 
 ```python
 observation = env.reset(seed=42)
