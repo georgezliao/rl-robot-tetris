@@ -1,7 +1,7 @@
 # RL Robot Tetris
 
 This project is attending as an experimental environment on one of my favorite games, Tetris. I want to compare agents that learn by watching
-and controlling the rendered game UI with agents that receive engineered state, mainly to see what conditions agents learn fastest under.
+and controlling the rendered game UI with agents that receive engineered state, mainly to see what conditions agents learn fastest under. In addition, this will be a chance for me to compare different architectures, reward definitions, and encoders to understand what is effective.
 
 ## Research questions
 
