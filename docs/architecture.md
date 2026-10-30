@@ -84,17 +84,22 @@ which is what evaluation uses.
 
 ### 4. Training (`training/visual.py`, `training/ppo.py`)
 
-`train_visual_agent` loops until the step budget is spent:
+`train_visual_agent` loops until the step budget is spent. Each iteration
+calls three functions:
 
-1. Collect `rollout_steps` transitions with the current policy. When an episode
-   ends, reset the environment with the next seed (`seed`, `seed + 1`, ...).
-2. Bootstrap the value of the last observation (zero if the rollout ended on a
-   terminal step) and compute advantages and returns with
-   `generalized_advantage_estimates`.
-3. Run `ppo_update`: `update_epochs` passes over shuffled minibatches with the
-   clipped surrogate, value loss and entropy bonus.
-4. Append episode and update rows to `metrics.jsonl`, and save a checkpoint
-   every `checkpoint_interval` steps plus `final.pt`.
+1. `collect_rollout` plays `rollout_steps` policy steps and returns a `Rollout`
+   (observations, actions, log-probabilities, values, rewards, done flags, and
+   the episodes that finished). When an episode ends, it resets the environment
+   on the next seed (`seed`, `seed + 1`, ...). `EpisodeProgress` carries the
+   unfinished episode into the next rollout.
+2. `update_policy` bootstraps the value after the last step (`bootstrap_value`,
+   zero if that step was terminal), computes advantages and returns with
+   `generalized_advantage_estimates`, and runs `ppo_update`: `update_epochs`
+   passes over shuffled minibatches with the clipped surrogate, value loss and
+   entropy bonus.
+3. The loop appends the episode and update rows to `metrics.jsonl` and saves a
+   checkpoint after the first update at or past each `checkpoint_interval`
+   boundary, plus `final.pt` at the end.
 
 Run outputs go to `experiments/training/<name>-<timestamp>/`
 (`resolved_config.json`, `metrics.jsonl`, `summary.json`, `checkpoints/`).

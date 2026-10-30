@@ -12,15 +12,17 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from tetris_rl.envs.base import TetrisEnv
 from tetris_rl.envs.javafx import JavaFxControlEnv
 from tetris_rl.models.cnn_policy import VisualActorCritic
-from tetris_rl.training.config import VisualExperimentConfig
+from tetris_rl.training.config import AlgorithmConfig, VisualExperimentConfig
 from tetris_rl.training.io_utils import (
     append_jsonl,
     observation_to_tensor,
     write_json,
 )
 from tetris_rl.training.ppo import (
+    PpoMetrics,
     generalized_advantage_estimates,
     ppo_update,
 )
@@ -98,6 +100,158 @@ def experiment_summary(config: VisualExperimentConfig) -> dict[str, Any]:
     }
 
 
+@dataclass(slots=True)
+class EpisodeProgress:
+    """The episode in progress, carried from one rollout into the next.
+
+    Episode ``index`` is played on piece seed ``config.seed + index``.
+    """
+
+    index: int = 0
+    length: int = 0
+    total_return: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class Rollout:
+    """A fixed-length batch of consecutive transitions from one environment.
+
+    Row ``t`` of every tensor describes the same transition: the observation the
+    policy saw, the action it sampled, that action's log-probability and value
+    estimate under the rollout policy, the reward, and whether the step ended an
+    episode. ``final_observation`` is the observation after the last row, used
+    to bootstrap the value when the rollout stops mid-episode.
+    """
+
+    observations: Tensor
+    actions: Tensor
+    log_probabilities: Tensor
+    values: Tensor
+    rewards: Tensor
+    dones: Tensor
+    final_observation: np.ndarray
+    finished_episodes: tuple[dict[str, Any], ...]
+
+    def __len__(self) -> int:
+        return int(self.rewards.shape[0])
+
+
+def collect_rollout(
+    environment: TetrisEnv[ControlAction],
+    model: VisualActorCritic,
+    actions: tuple[ControlAction, ...],
+    observation: np.ndarray,
+    progress: EpisodeProgress,
+    *,
+    length: int,
+    first_seed: int,
+    terminal_penalty: float,
+    steps_before: int,
+    device: torch.device,
+) -> Rollout:
+    """Play ``length`` policy steps starting from ``observation``.
+
+    When an episode ends, its summary is added to ``finished_episodes`` and the
+    environment is reset on the next seed, so a rollout may span several
+    episodes. ``progress`` is updated in place.
+    """
+    observations: list[Tensor] = []
+    selected_actions: list[Tensor] = []
+    log_probabilities: list[Tensor] = []
+    values: list[Tensor] = []
+    rewards: list[float] = []
+    dones: list[bool] = []
+    finished_episodes: list[dict[str, Any]] = []
+
+    model.eval()
+    for step in range(length):
+        observation_tensor = observation_to_tensor(observation, device)
+        policy_action, log_probability, value = model.act(observation_tensor)
+        next_observation, raw_reward, done, info = environment.step(
+            actions[int(policy_action.item())]
+        )
+        reward = raw_reward + (terminal_penalty if done else 0.0)
+
+        observations.append(observation_tensor.squeeze(0))
+        selected_actions.append(policy_action.squeeze(0))
+        log_probabilities.append(log_probability.squeeze(0))
+        values.append(value.squeeze(0))
+        rewards.append(reward)
+        dones.append(done)
+        progress.length += 1
+        progress.total_return += reward
+
+        if done:
+            finished_episodes.append(
+                {
+                    "type": "episode",
+                    "episode": progress.index,
+                    "seed": first_seed + progress.index,
+                    "environment_steps": steps_before + step + 1,
+                    "length": progress.length,
+                    "return": progress.total_return,
+                    "score": info.get("score"),
+                    "total_lines": info.get("total_lines"),
+                    "pieces_placed": info.get("pieces_placed"),
+                }
+            )
+            progress.index += 1
+            progress.length = 0
+            progress.total_return = 0.0
+            next_observation = environment.reset(seed=first_seed + progress.index)
+        observation = next_observation
+
+    return Rollout(
+        observations=torch.stack(observations),
+        actions=torch.stack(selected_actions).long(),
+        log_probabilities=torch.stack(log_probabilities),
+        values=torch.stack(values),
+        rewards=torch.tensor(rewards, dtype=torch.float32, device=device),
+        dones=torch.tensor(dones, dtype=torch.float32, device=device),
+        final_observation=observation,
+        finished_episodes=tuple(finished_episodes),
+    )
+
+
+def bootstrap_value(
+    model: VisualActorCritic, rollout: Rollout, device: torch.device
+) -> Tensor:
+    """Value of the state after the rollout; zero if the last step was terminal."""
+    if rollout.dones[-1]:
+        return torch.zeros((), device=device)
+    with torch.no_grad():
+        _, next_values = model(observation_to_tensor(rollout.final_observation, device))
+    return next_values.squeeze(0)
+
+
+def update_policy(
+    model: VisualActorCritic,
+    optimizer: torch.optim.Optimizer,
+    rollout: Rollout,
+    config: AlgorithmConfig,
+    device: torch.device,
+) -> PpoMetrics:
+    """Compute GAE advantages for ``rollout`` and run one PPO update on it."""
+    advantages, returns = generalized_advantage_estimates(
+        rollout.rewards,
+        rollout.values,
+        rollout.dones,
+        bootstrap_value(model, rollout, device),
+        gamma=config.gamma,
+        gae_lambda=config.gae_lambda,
+    )
+    return ppo_update(
+        model,
+        optimizer,
+        rollout.observations,
+        rollout.actions,
+        rollout.log_probabilities,
+        advantages,
+        returns,
+        config,
+    )
+
+
 def _checkpoint(
     path: Path,
     model: VisualActorCritic,
@@ -117,12 +271,54 @@ def _checkpoint(
     )
 
 
+def _create_run_directory(
+    config: VisualExperimentConfig,
+    *,
+    requested_steps: int,
+    actions: tuple[ControlAction, ...],
+    device: torch.device,
+    model: VisualActorCritic,
+) -> Path:
+    """Create ``<output>/<name>-<UTC time>/checkpoints`` and the resolved config."""
+    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+    run_directory = config.training.output_directory / f"{config.name}-{run_id}"
+    (run_directory / "checkpoints").mkdir(parents=True)
+    write_json(
+        run_directory / "resolved_config.json",
+        {
+            **config.to_dict(),
+            "executed_environment_steps": requested_steps,
+            "action_labels": [action.name for action in actions],
+            "resolved_device": str(device),
+            "model_parameters": model.parameter_count,
+        },
+    )
+    return run_directory
+
+
+def _update_record(
+    update: int, environment_steps: int, metrics: PpoMetrics
+) -> dict[str, Any]:
+    return {
+        "type": "update",
+        "update": update,
+        "environment_steps": environment_steps,
+        **{field: getattr(metrics, field) for field in metrics.__dataclass_fields__},
+    }
+
+
 def train_visual_agent(
     config: VisualExperimentConfig,
     *,
     environment_steps_override: int | None = None,
 ) -> TrainingResult:
-    """Train the reference PPO policy for a finite number of UI interactions."""
+    """Train the reference PPO policy for a finite number of UI interactions.
+
+    Each iteration collects one rollout, updates the policy on it, and logs the
+    finished episodes and update metrics to ``metrics.jsonl``. A checkpoint is
+    saved after the first update at or past each ``checkpoint_interval``
+    boundary, and ``final.pt`` at the end.
+    """
     validate_runtime_support(config)
     requested_steps = (
         config.training.environment_steps
@@ -142,28 +338,20 @@ def train_visual_agent(
     ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.algorithm.learning_rate)
 
-    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
-    run_directory = config.training.output_directory / f"{config.name}-{run_id}"
-    checkpoint_directory = run_directory / "checkpoints"
-    checkpoint_directory.mkdir(parents=True)
-    write_json(
-        run_directory / "resolved_config.json",
-        {
-            **config.to_dict(),
-            "executed_environment_steps": requested_steps,
-            "action_labels": [action.name for action in actions],
-            "resolved_device": str(device),
-            "model_parameters": model.parameter_count,
-        },
+    run_directory = _create_run_directory(
+        config,
+        requested_steps=requested_steps,
+        actions=actions,
+        device=device,
+        model=model,
     )
+    checkpoint_directory = run_directory / "checkpoints"
     metrics_path = run_directory / "metrics.jsonl"
 
     steps_done = 0
     completed_episodes = 0
     updates = 0
-    episode_index = 0
-    episode_return = 0.0
-    episode_length = 0
+    progress = EpisodeProgress()
     next_checkpoint = config.training.checkpoint_interval
 
     with JavaFxControlEnv(
@@ -172,103 +360,32 @@ def train_visual_agent(
     ) as environment:
         observation = environment.reset(seed=config.seed)
         while steps_done < requested_steps:
-            rollout_length = min(
-                config.algorithm.rollout_steps, requested_steps - steps_done
-            )
-            observations: list[Tensor] = []
-            selected_actions: list[Tensor] = []
-            log_probabilities: list[Tensor] = []
-            values: list[Tensor] = []
-            rewards: list[float] = []
-            dones: list[bool] = []
-
-            model.eval()
-            for _ in range(rollout_length):
-                observation_tensor = observation_to_tensor(observation, device)
-                policy_action, log_probability, value = model.act(observation_tensor)
-                action_index = int(policy_action.item())
-                next_observation, raw_reward, done, info = environment.step(
-                    actions[action_index]
-                )
-                reward = raw_reward + (config.reward.terminal_penalty if done else 0.0)
-
-                observations.append(observation_tensor.squeeze(0))
-                selected_actions.append(policy_action.squeeze(0))
-                log_probabilities.append(log_probability.squeeze(0))
-                values.append(value.squeeze(0))
-                rewards.append(reward)
-                dones.append(done)
-                steps_done += 1
-                episode_length += 1
-                episode_return += reward
-
-                if done:
-                    append_jsonl(
-                        metrics_path,
-                        {
-                            "type": "episode",
-                            "episode": episode_index,
-                            "seed": config.seed + episode_index,
-                            "environment_steps": steps_done,
-                            "length": episode_length,
-                            "return": episode_return,
-                            "score": info.get("score"),
-                            "total_lines": info.get("total_lines"),
-                            "pieces_placed": info.get("pieces_placed"),
-                        },
-                    )
-                    completed_episodes += 1
-                    episode_index += 1
-                    episode_return = 0.0
-                    episode_length = 0
-                    next_observation = environment.reset(
-                        seed=config.seed + episode_index
-                    )
-                observation = next_observation
-
-            with torch.no_grad():
-                if dones[-1]:
-                    next_value = torch.zeros((), device=device)
-                else:
-                    _, next_values = model(observation_to_tensor(observation, device))
-                    next_value = next_values.squeeze(0)
-
-            observation_batch = torch.stack(observations)
-            action_batch = torch.stack(selected_actions).long()
-            old_log_probability_batch = torch.stack(log_probabilities)
-            value_batch = torch.stack(values)
-            reward_batch = torch.tensor(rewards, dtype=torch.float32, device=device)
-            done_batch = torch.tensor(dones, dtype=torch.float32, device=device)
-            advantages, returns = generalized_advantage_estimates(
-                reward_batch,
-                value_batch,
-                done_batch,
-                next_value,
-                gamma=config.algorithm.gamma,
-                gae_lambda=config.algorithm.gae_lambda,
-            )
-            update_metrics = ppo_update(
+            rollout = collect_rollout(
+                environment,
                 model,
-                optimizer,
-                observation_batch,
-                action_batch,
-                old_log_probability_batch,
-                advantages,
-                returns,
-                config.algorithm,
+                actions,
+                observation,
+                progress,
+                length=min(
+                    config.algorithm.rollout_steps, requested_steps - steps_done
+                ),
+                first_seed=config.seed,
+                terminal_penalty=config.reward.terminal_penalty,
+                steps_before=steps_done,
+                device=device,
+            )
+            steps_done += len(rollout)
+            observation = rollout.final_observation
+            for episode in rollout.finished_episodes:
+                append_jsonl(metrics_path, episode)
+            completed_episodes += len(rollout.finished_episodes)
+
+            update_metrics = update_policy(
+                model, optimizer, rollout, config.algorithm, device
             )
             updates += 1
             append_jsonl(
-                metrics_path,
-                {
-                    "type": "update",
-                    "update": updates,
-                    "environment_steps": steps_done,
-                    **{
-                        field: getattr(update_metrics, field)
-                        for field in update_metrics.__dataclass_fields__
-                    },
-                },
+                metrics_path, _update_record(updates, steps_done, update_metrics)
             )
 
             if steps_done >= next_checkpoint:
@@ -289,8 +406,8 @@ def train_visual_agent(
             "environment_steps": steps_done,
             "completed_episodes": completed_episodes,
             "updates": updates,
-            "unfinished_episode_length": episode_length,
-            "unfinished_episode_return": episode_return,
+            "unfinished_episode_length": progress.length,
+            "unfinished_episode_return": progress.total_return,
         },
     )
     return TrainingResult(run_directory, steps_done, completed_episodes, updates)
