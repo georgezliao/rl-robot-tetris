@@ -22,6 +22,75 @@ class PpoMetrics:
     clip_fraction: float
 
 
+@dataclass(frozen=True, slots=True)
+class PpoLosses:
+    """Loss terms for one minibatch.
+
+    ``total`` keeps its autograd graph; every other field is detached.
+    """
+
+    total: Tensor
+    policy: Tensor
+    value: Tensor
+    entropy: Tensor
+    approximate_kl: Tensor
+    clip_fraction: Tensor
+
+
+def ppo_losses(
+    new_log_probabilities: Tensor,
+    old_log_probabilities: Tensor,
+    advantages: Tensor,
+    predicted_values: Tensor,
+    returns: Tensor,
+    entropies: Tensor,
+    config: AlgorithmConfig,
+) -> PpoLosses:
+    """Return the PPO loss terms for one minibatch of sampled actions.
+
+    With probability ratio ``rho = exp(new_log_prob - old_log_prob)`` and
+    clip range ``epsilon``:
+
+    - policy loss: ``-mean(min(rho * A, clip(rho, 1 - epsilon, 1 + epsilon) * A))``.
+      Taking the minimum means a sample stops contributing gradient once its
+      ratio has moved past the clip boundary in the direction that helps it.
+    - value loss: ``mean((V - R) ** 2)``.
+    - total: ``policy + value_coefficient * value - entropy_coefficient * entropy``.
+
+    ``approximate_kl`` is the ``mean((rho - 1) - log rho)`` estimator of
+    KL(old || new), and ``clip_fraction`` is the share of samples with
+    ``|rho - 1| > epsilon``. Both are diagnostics only.
+    """
+    log_ratio = new_log_probabilities - old_log_probabilities
+    probability_ratio = log_ratio.exp()
+    unclipped = probability_ratio * advantages
+    clipped = (
+        probability_ratio.clamp(1.0 - config.clip_epsilon, 1.0 + config.clip_epsilon)
+        * advantages
+    )
+    policy_loss = -torch.minimum(unclipped, clipped).mean()
+    value_loss = nn.functional.mse_loss(predicted_values, returns)
+    entropy = entropies.mean()
+    total_loss = (
+        policy_loss
+        + config.value_coefficient * value_loss
+        - config.entropy_coefficient * entropy
+    )
+    with torch.no_grad():
+        approximate_kl = ((probability_ratio - 1.0) - log_ratio).mean()
+        clip_fraction = (
+            ((probability_ratio - 1.0).abs() > config.clip_epsilon).float().mean()
+        )
+    return PpoLosses(
+        total=total_loss,
+        policy=policy_loss.detach(),
+        value=value_loss.detach(),
+        entropy=entropy.detach(),
+        approximate_kl=approximate_kl,
+        clip_fraction=clip_fraction,
+    )
+
+
 def generalized_advantage_estimates(
     rewards: Tensor,
     values: Tensor,
@@ -106,48 +175,31 @@ def ppo_update(
             distribution, predicted_values = model.distribution_and_value(
                 observations[indices]
             )
-            new_log_probabilities = distribution.log_prob(actions[indices])
-            log_ratio = new_log_probabilities - old_log_probabilities[indices]
-            probability_ratio = log_ratio.exp()
-            selected_advantages = normalized_advantages[indices]
-            unclipped = probability_ratio * selected_advantages
-            clipped = (
-                probability_ratio.clamp(
-                    1.0 - config.clip_epsilon, 1.0 + config.clip_epsilon
-                )
-                * selected_advantages
-            )
-            policy_loss = -torch.minimum(unclipped, clipped).mean()
-            value_loss = nn.functional.mse_loss(predicted_values, returns[indices])
-            entropy = distribution.entropy().mean()
-            total_loss = (
-                policy_loss
-                + config.value_coefficient * value_loss
-                - config.entropy_coefficient * entropy
+            losses = ppo_losses(
+                distribution.log_prob(actions[indices]),
+                old_log_probabilities[indices],
+                normalized_advantages[indices],
+                predicted_values,
+                returns[indices],
+                distribution.entropy(),
+                config,
             )
 
             optimizer.zero_grad(set_to_none=True)
-            total_loss.backward()
+            losses.total.backward()
             nn.utils.clip_grad_norm_(model.parameters(), config.max_gradient_norm)
             optimizer.step()
 
-            with torch.no_grad():
-                approximate_kl = ((probability_ratio - 1.0) - log_ratio).mean()
-                clip_fraction = (
-                    ((probability_ratio - 1.0).abs() > config.clip_epsilon)
-                    .float()
-                    .mean()
-                )
-                totals += torch.tensor(
-                    [
-                        policy_loss.item(),
-                        value_loss.item(),
-                        entropy.item(),
-                        approximate_kl.item(),
-                        clip_fraction.item(),
-                    ],
-                    dtype=torch.float64,
-                )
+            totals += torch.tensor(
+                [
+                    losses.policy.item(),
+                    losses.value.item(),
+                    losses.entropy.item(),
+                    losses.approximate_kl.item(),
+                    losses.clip_fraction.item(),
+                ],
+                dtype=torch.float64,
+            )
             minibatch_count += 1
 
     means = totals / minibatch_count
