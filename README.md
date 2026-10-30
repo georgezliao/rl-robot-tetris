@@ -38,6 +38,8 @@ tests/
 
 [docs/architecture.md](docs/architecture.md) follows one decision from the
 JavaFX bridge to a saved checkpoint and lists which modules are placeholders.
+[docs/training.md](docs/training.md) walks through one PPO iteration and
+evaluation with the equations, config keys and `metrics.jsonl` fields.
 
 ## Environment contract
 

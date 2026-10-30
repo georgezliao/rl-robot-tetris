@@ -2,7 +2,7 @@
 
 This page follows one agent decision through the code, from the JavaFX game to
 a saved checkpoint, and lists which modules are placeholders. For the training
-math and configuration keys, see the README's "Reference visual agent" section.
+math, configuration keys and logged metrics, see [training.md](training.md).
 
 ## The live path
 
