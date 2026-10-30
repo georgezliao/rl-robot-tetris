@@ -112,6 +112,27 @@ class EpisodeProgress:
     total_return: float = 0.0
 
 
+class SeedCollisionError(RuntimeError):
+    """A training episode would be played on a held-out evaluation seed."""
+
+
+def training_episode_seed(first_seed: int, index: int, reserved: range) -> int:
+    """Return the piece seed for training episode ``index``.
+
+    Training episodes use ``first_seed, first_seed + 1, ...``. ``reserved`` is the
+    evaluation seed range; training on one of those seeds would make the
+    held-out evaluation partly in-sample, so it raises instead.
+    """
+    seed = first_seed + index
+    if seed in reserved:
+        raise SeedCollisionError(
+            f"training episode {index} would use seed {seed}, which is in the "
+            f"evaluation range [{reserved.start}, {reserved.stop}); move "
+            "evaluation.first_seed or the training seed"
+        )
+    return seed
+
+
 @dataclass(frozen=True, slots=True)
 class Rollout:
     """A fixed-length batch of consecutive transitions from one environment.
@@ -148,12 +169,14 @@ def collect_rollout(
     terminal_penalty: float,
     steps_before: int,
     device: torch.device,
+    reserved_seeds: range = range(0),
 ) -> Rollout:
     """Play ``length`` policy steps starting from ``observation``.
 
     When an episode ends, its summary is added to ``finished_episodes`` and the
     environment is reset on the next seed, so a rollout may span several
-    episodes. ``progress`` is updated in place.
+    episodes. ``progress`` is updated in place. Raises ``SeedCollisionError``
+    before resetting onto a seed in ``reserved_seeds``.
     """
     observations: list[Tensor] = []
     selected_actions: list[Tensor] = []
@@ -198,7 +221,9 @@ def collect_rollout(
             progress.index += 1
             progress.length = 0
             progress.total_return = 0.0
-            next_observation = environment.reset(seed=first_seed + progress.index)
+            next_observation = environment.reset(
+                seed=training_episode_seed(first_seed, progress.index, reserved_seeds)
+            )
         observation = next_observation
 
     return Rollout(
@@ -291,6 +316,14 @@ def _create_run_directory(
             "action_labels": [action.name for action in actions],
             "resolved_device": str(device),
             "model_parameters": model.parameter_count,
+            "seed_ranges": {
+                # Training episode i uses training_first_seed + i.
+                "training_first_seed": config.seed,
+                "evaluation_seeds": [
+                    config.evaluation.seeds.start,
+                    config.evaluation.seeds.stop - 1,
+                ],
+            },
         },
     )
     return run_directory
@@ -358,7 +391,10 @@ def train_visual_agent(
         observation_size=(config.observation.height, config.observation.width),
         frame_stack=config.observation.frame_stack,
     ) as environment:
-        observation = environment.reset(seed=config.seed)
+        reserved_seeds = config.evaluation.seeds
+        observation = environment.reset(
+            seed=training_episode_seed(config.seed, 0, reserved_seeds)
+        )
         while steps_done < requested_steps:
             rollout = collect_rollout(
                 environment,
@@ -373,6 +409,7 @@ def train_visual_agent(
                 terminal_penalty=config.reward.terminal_penalty,
                 steps_before=steps_done,
                 device=device,
+                reserved_seeds=reserved_seeds,
             )
             steps_done += len(rollout)
             observation = rollout.final_observation

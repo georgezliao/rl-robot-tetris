@@ -1,8 +1,15 @@
 import numpy as np
+import pytest
 import torch
 
 from tetris_rl.models.cnn_policy import VisualActorCritic
-from tetris_rl.training.visual import EpisodeProgress, bootstrap_value, collect_rollout
+from tetris_rl.training.visual import (
+    EpisodeProgress,
+    SeedCollisionError,
+    bootstrap_value,
+    collect_rollout,
+    training_episode_seed,
+)
 from tetris_rl.types import ControlAction, Info, Observation, StepResult
 
 SHAPE = (3, 36, 36)
@@ -96,3 +103,34 @@ def test_bootstrap_value_is_zero_after_a_terminal_step() -> None:
 
     assert rollout.dones[-1].item() == 1.0
     assert bootstrap_value(model, rollout, torch.device("cpu")).item() == 0.0
+
+
+def test_training_episode_seed_refuses_evaluation_seeds() -> None:
+    reserved = range(10000, 10100)
+
+    assert training_episode_seed(42, 9957, reserved) == 9999
+    with pytest.raises(SeedCollisionError, match="seed 10000"):
+        training_episode_seed(42, 9958, reserved)
+    assert training_episode_seed(42, 10058, reserved) == 10100
+
+
+def test_rollout_stops_before_resetting_onto_an_evaluation_seed() -> None:
+    torch.manual_seed(0)
+    environment = ThreeStepEnv()
+    model = VisualActorCritic(SHAPE, action_count=7, feature_dim=8)
+
+    with pytest.raises(SeedCollisionError):
+        collect_rollout(
+            environment,
+            model,
+            tuple(ControlAction),
+            environment.reset(seed=9),
+            EpisodeProgress(),
+            length=5,
+            first_seed=9,
+            terminal_penalty=0.0,
+            steps_before=0,
+            device=torch.device("cpu"),
+            reserved_seeds=range(10, 20),
+        )
+    assert environment.reset_seeds == [9]

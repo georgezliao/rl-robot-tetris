@@ -91,7 +91,11 @@ calls three functions:
    (observations, actions, log-probabilities, values, rewards, done flags, and
    the episodes that finished). When an episode ends, it resets the environment
    on the next seed (`seed`, `seed + 1`, ...). `EpisodeProgress` carries the
-   unfinished episode into the next rollout.
+   unfinished episode into the next rollout. If the next training seed falls in
+   the evaluation range (`evaluation.first_seed` onward, `evaluation.episodes`
+   seeds), `training_episode_seed` raises `SeedCollisionError` instead of
+   training on a held-out seed. With the reference config (`seed: 42`,
+   evaluation seeds 10000–10099) that happens at training episode 9958.
 2. `update_policy` bootstraps the value after the last step (`bootstrap_value`,
    zero if that step was terminal), computes advantages and returns with
    `generalized_advantage_estimates`, and runs `ppo_update`: `update_epochs`

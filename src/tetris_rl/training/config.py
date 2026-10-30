@@ -128,6 +128,11 @@ class EvaluationConfig:
     max_steps_per_episode: int
     output_directory: Path
 
+    @property
+    def seeds(self) -> range:
+        """Held-out piece seeds, one per evaluation episode."""
+        return range(self.first_seed, self.first_seed + self.episodes)
+
 
 @dataclass(frozen=True, slots=True)
 class VisualExperimentConfig:
