@@ -1,0 +1,39 @@
+{
+  "config_path": "configs/visual/reference_ppo.yaml",
+  "created_utc": "2026-10-30T00:31:12.302799+00:00",
+  "device": {
+    "description": "Apple M4",
+    "type": "cpu"
+  },
+  "extra": {
+    "checkpoint_environment_steps": 4096,
+    "checkpoint_path": "experiments/training/visual_reference_ppo-20261030T002900.532237Z/checkpoints/final.pt",
+    "checkpoint_sha256": "c339681a870204cd05ce8ed550294a2fec7458d794c533572434bb63807115ba"
+  },
+  "platform": {
+    "machine": "arm64",
+    "release": "25.0.0",
+    "system": "Darwin"
+  },
+  "repository": {
+    "commit": "80f07583ccbca173a3d88a14eccb024f876d81f3",
+    "dirty": false
+  },
+  "schema_version": 1,
+  "seeds": {
+    "evaluation_seeds": [
+      10000,
+      10099
+    ]
+  },
+  "tetris": {
+    "commit": "bc65bf271f93f23052bb520d693c7e20ebd8f7e1",
+    "dirty": true
+  },
+  "versions": {
+    "java": "openjdk version \"1.8.0_345\"",
+    "numpy": "2.5.4",
+    "python": "3.14.0",
+    "torch": "2.14.1"
+  }
+}
