@@ -23,6 +23,7 @@ from tetris_rl.models.cnn_policy import VisualActorCritic
 from tetris_rl.training.config import VisualExperimentConfig, load_visual_config
 from tetris_rl.training.io_utils import observation_to_tensor, write_json
 from tetris_rl.training.provenance import collect_provenance
+from tetris_rl.training.results import export_results
 from tetris_rl.training.visual import (
     action_set,
     resolve_device,
@@ -409,6 +410,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="bounded diagnostic override",
     )
+    parser.add_argument(
+        "--results-root",
+        type=Path,
+        help=(
+            "also write summary.json, episodes.csv and provenance.json to "
+            "<results-root>/<date>-<device>-<run>/ (normally results/)"
+        ),
+    )
     return parser
 
 
@@ -427,6 +436,21 @@ def main() -> None:
         raise SystemExit("episode and step limits must be positive")
     loaded = load_visual_checkpoint(args.checkpoint, config)
     output_root = args.output_root or config.evaluation.output_directory
+    provenance = collect_provenance(
+        config_path=args.config,
+        seeds={
+            "evaluation_seeds": [
+                config.evaluation.first_seed,
+                config.evaluation.first_seed + episode_count - 1,
+            ],
+        },
+        device=next(loaded.model.parameters()).device,
+        extra={
+            "checkpoint_path": str(args.checkpoint),
+            "checkpoint_sha256": loaded.sha256,
+            "checkpoint_environment_steps": loaded.environment_steps,
+        },
+    )
     with JavaFxControlEnv(
         observation_size=(config.observation.height, config.observation.width),
         frame_stack=config.observation.frame_stack,
@@ -438,25 +462,16 @@ def main() -> None:
             output_root=output_root,
             episode_count=episode_count,
             max_steps_per_episode=max_steps,
-            provenance=collect_provenance(
-                config_path=args.config,
-                seeds={
-                    "evaluation_seeds": [
-                        config.evaluation.first_seed,
-                        config.evaluation.first_seed + episode_count - 1,
-                    ],
-                },
-                device=next(loaded.model.parameters()).device,
-                extra={
-                    "checkpoint_path": str(args.checkpoint),
-                    "checkpoint_sha256": loaded.sha256,
-                    "checkpoint_environment_steps": loaded.environment_steps,
-                },
-            ),
+            provenance=provenance,
+        )
+    printed: dict[str, Any] = {"run_directory": str(result.run_directory)}
+    if args.results_root is not None:
+        printed["results_directory"] = str(
+            export_results(result, provenance, args.results_root)
         )
     print(
         json.dumps(
-            {"run_directory": str(result.run_directory), **result.summary},
+            {**printed, **result.summary},
             indent=2,
             sort_keys=True,
             allow_nan=False,

@@ -202,6 +202,10 @@ limit is marked as truncated rather than terminal. Lines per 100 pieces is store
 as `null` when no pieces were placed. The evaluator hashes model parameters
 before and after execution and fails if they change.
 
+Add `--results-root results` to also write a small committed summary
+(`summary.json`, `episodes.csv`, `provenance.json`) to
+`results/<date>-<device>-<run>/`. See [results/README.md](results/README.md).
+
 ### Run provenance
 
 `provenance.json` records the outer repository commit and whether the working
