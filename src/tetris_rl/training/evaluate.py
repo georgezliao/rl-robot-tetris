@@ -209,29 +209,29 @@ def _scalar_metrics(info: Mapping[str, object]) -> dict[str, JsonScalar]:
     return metrics
 
 
-def _integer_metric(info: Mapping[str, object], name: str) -> int:
+def integer_metric(info: Mapping[str, object], name: str) -> int:
     value = info.get(name)
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"Expected integer metric {name!r}, got {value!r}")
     return value
 
 
-def _aggregate(
+def aggregate_episodes(
     episodes: Sequence[EpisodeResult],
     *,
-    loaded: LoadedCheckpoint,
     seeds: Sequence[int],
     max_steps_per_episode: int,
-    parameters_unchanged: bool,
 ) -> dict[str, Any]:
+    """Policy-independent summary metrics over evaluation episodes.
+
+    ``lines_per_100_pieces`` is ``100 * sum(lines) / sum(pieces)`` and is None
+    when no pieces were placed.
+    """
     total_lines = sum(episode.lines for episode in episodes)
     total_score = sum(episode.score for episode in episodes)
     total_pieces = sum(episode.pieces for episode in episodes)
     episode_count = len(episodes)
     return {
-        "checkpoint_sha256": loaded.sha256,
-        "checkpoint_environment_steps": loaded.environment_steps,
-        "action_labels": list(loaded.action_labels),
         "seeds": list(seeds),
         "max_steps_per_episode": max_steps_per_episode,
         "episode_count": episode_count,
@@ -246,6 +246,24 @@ def _aggregate(
         "mean_survival_pieces": total_pieces / episode_count,
         "lines_per_100_pieces": (
             None if total_pieces == 0 else 100.0 * total_lines / total_pieces
+        ),
+    }
+
+
+def _aggregate(
+    episodes: Sequence[EpisodeResult],
+    *,
+    loaded: LoadedCheckpoint,
+    seeds: Sequence[int],
+    max_steps_per_episode: int,
+    parameters_unchanged: bool,
+) -> dict[str, Any]:
+    return {
+        "checkpoint_sha256": loaded.sha256,
+        "checkpoint_environment_steps": loaded.environment_steps,
+        "action_labels": list(loaded.action_labels),
+        **aggregate_episodes(
+            episodes, seeds=seeds, max_steps_per_episode=max_steps_per_episode
         ),
         "parameters_unchanged": parameters_unchanged,
         "deterministic_action_selection": True,
@@ -367,9 +385,9 @@ def evaluate_loaded_policy(
             terminated=done,
             truncated=not done,
             episode_return=cumulative_reward,
-            score=_integer_metric(final_info, "score"),
-            lines=_integer_metric(final_info, "total_lines"),
-            pieces=_integer_metric(final_info, "pieces_placed"),
+            score=integer_metric(final_info, "score"),
+            lines=integer_metric(final_info, "total_lines"),
+            pieces=integer_metric(final_info, "pieces_placed"),
             recording_directory=str(recording_directory),
         )
         results.append(episode_result)
