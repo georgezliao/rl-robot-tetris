@@ -50,3 +50,22 @@ def test_relative_configuration_inheritance_merges_nested_values(
     assert config.name == "no_hold"
     assert ControlAction.HOLD not in action_set(config)
     assert len(action_set(config)) == 6
+
+
+def test_terminal_variant_changes_only_penalty_name_and_evaluation_seeds() -> None:
+    base = load_visual_config("configs/visual/reference_ppo.yaml").to_dict()
+    variant = load_visual_config("configs/visual/reference_ppo_terminal.yaml").to_dict()
+
+    assert variant["reward"]["terminal_penalty"] == -1.0
+    assert variant["evaluation"]["first_seed"] == 1_000_000
+    for changed in (
+        ("name",),
+        ("reward", "terminal_penalty"),
+        ("evaluation", "first_seed"),
+    ):
+        parent_base, parent_variant = base, variant
+        for key in changed[:-1]:
+            parent_base, parent_variant = parent_base[key], parent_variant[key]
+        parent_base.pop(changed[-1])
+        parent_variant.pop(changed[-1])
+    assert variant == base

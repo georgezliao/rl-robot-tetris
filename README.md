@@ -133,6 +133,14 @@ policy head and a scalar value head. The policy chooses one of the seven UI
 controls; it does not receive board cells, legal-action masks, score, line
 counts, or other values from the bridge's `info` mapping.
 
+`configs/visual/reference_ppo_terminal.yaml` extends it with two changes:
+`reward.terminal_penalty: -1.0` and evaluation seeds starting at 1,000,000.
+Random, no-op and hard-drop baselines cleared no lines in 300 episodes on this
+game, so with lines as the only reward an untrained policy sees reward 0 on
+every step. The game-over penalty gives it a survival signal. Training episodes
+use seeds 42, 43, ... and a 1M-step run plays tens of thousands of episodes, so
+the evaluation seeds were moved out of reach.
+
 The current reference optimizer is proximal policy optimization (PPO). For a
 transition at index `t`, let `r_t` be the scalar reward, `V_t` the value
 estimate, `d_t` in `{0, 1}` the terminal indicator, `gamma` the discount, and

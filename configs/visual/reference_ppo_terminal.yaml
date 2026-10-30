@@ -1,0 +1,19 @@
+# Reference PPO with a game-over penalty.
+#
+# Differs from reference_ppo.yaml in two ways:
+# - reward.terminal_penalty is -1.0, so losing is the one signal an untrained
+#   policy reliably sees. Random, no-op and hard-drop baselines cleared no lines
+#   in 300 episodes, so sparse_lines alone gave an all-zero reward.
+# - Evaluation seeds start at 1,000,000. Training episodes use 42, 43, ... and
+#   a 1M-step run plays roughly 20,000 episodes, which would have reached the
+#   old evaluation range at 10,000.
+# The penalty uses the game-over flag, which the bridge reports from internal
+# state. The policy still sees only pixels.
+extends: reference_ppo.yaml
+name: visual_reference_ppo_terminal
+
+reward:
+  terminal_penalty: -1.0
+
+evaluation:
+  first_seed: 1000000
