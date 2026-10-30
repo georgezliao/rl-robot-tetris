@@ -102,10 +102,25 @@ def generalized_advantage_estimates(
 ) -> tuple[Tensor, Tensor]:
     """Return advantages and value targets for a single ordered rollout.
 
-    ``dones[t]`` is one when transition ``t`` terminates an episode. Therefore,
-    both the one-step bootstrap and the recursive advantage are masked at that
-    transition. The returned tensors have the same one-dimensional shape as the
-    rewards.
+    Working backward from the last transition::
+
+        delta_t = r_t + gamma * (1 - d_t) * V_(t+1) - V_t
+        A_t     = delta_t + gamma * lambda * (1 - d_t) * A_(t+1)
+        R_t     = A_t + V_t
+
+    where ``V_(t+1)`` is ``values[t + 1]``, or ``next_value`` for the last row.
+
+    - ``dones[t] == 1`` ends an episode at ``t``. Nothing after ``t`` (neither
+      the next value nor the next advantage) flows back into ``t``, so several
+      episodes can share one rollout.
+    - If the rollout stops mid-episode (last ``dones`` is zero), ``next_value``
+      stands in for the unseen rest of the episode. If the last step is
+      terminal, ``next_value`` is ignored.
+    - ``gae_lambda = 0`` gives one-step TD errors (``A_t = delta_t``);
+      ``gae_lambda = 1`` gives the discounted return to the episode end (or
+      bootstrap) minus ``V_t``. ``gamma = 0`` reduces both to ``r_t - V_t``.
+
+    All tensors are one-dimensional with one entry per transition.
     """
     if rewards.ndim != 1 or values.ndim != 1 or dones.ndim != 1:
         raise ValueError("rewards, values, and dones must be one-dimensional")
