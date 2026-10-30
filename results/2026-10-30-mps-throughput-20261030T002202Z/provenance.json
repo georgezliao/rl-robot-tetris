@@ -1,0 +1,31 @@
+{
+  "config_path": "configs/visual/reference_ppo.yaml",
+  "created_utc": "2026-10-30T00:22:02.071905+00:00",
+  "device": {
+    "description": "MPS on Apple M4",
+    "type": "mps"
+  },
+  "platform": {
+    "machine": "arm64",
+    "release": "25.0.0",
+    "system": "Darwin"
+  },
+  "repository": {
+    "commit": "53843cd9b53d2a015f9afdaf1fc0eb1990ee28a6",
+    "dirty": true
+  },
+  "schema_version": 1,
+  "seeds": {
+    "training_first_seed": 42
+  },
+  "tetris": {
+    "commit": "bc65bf271f93f23052bb520d693c7e20ebd8f7e1",
+    "dirty": true
+  },
+  "versions": {
+    "java": "openjdk version \"1.8.0_345\"",
+    "numpy": "2.5.4",
+    "python": "3.14.0",
+    "torch": "2.14.1"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "collection_steps_per_second": 81.02037054731763,
+  "config": "configs/visual/reference_ppo.yaml",
+  "device": "cpu",
+  "episodes_finished_in_step_loop": 20,
+  "estimated_hours_per_million_steps": 6.5484228417335535,
+  "estimated_training_steps_per_second": 42.419035009083515,
+  "measured_steps": 1000,
+  "measured_updates": 10,
+  "minibatch_size": 64,
+  "rollout_steps": 128,
+  "step_loop_wall_clock_seconds": 12.342574999900535,
+  "timings": {
+    "env_reset": {
+      "count": 20,
+      "mean_ms": 15.588745730929077,
+      "median_ms": 14.696062891744077,
+      "p90_ms": 20.85892139002681
+    },
+    "env_step": {
+      "count": 1000,
+      "mean_ms": 10.96527683828026,
+      "median_ms": 10.196646093390882,
+      "p90_ms": 13.420650479383767
+    },
+    "policy_forward": {
+      "count": 1000,
+      "mean_ms": 0.9745682063512504,
+      "median_ms": 0.8776250761002302,
+      "p90_ms": 1.2240506475791335
+    },
+    "ppo_update": {
+      "count": 10,
+      "mean_ms": 1439.9157834006473,
+      "median_ms": 1437.6636454835534,
+      "p90_ms": 1452.6760627515614
+    }
+  },
+  "update_epochs": 4,
+  "warmup_steps": 20,
+  "warmup_updates": 1,
+  "what_was_timed": "Time the three parts of a training step on the live JavaFX bridge."
+}

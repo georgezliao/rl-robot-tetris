@@ -1,0 +1,43 @@
+{
+  "collection_steps_per_second": 56.83783810284513,
+  "config": "configs/visual/reference_ppo.yaml",
+  "device": "cpu",
+  "episodes_finished_in_step_loop": 20,
+  "estimated_hours_per_million_steps": 8.022207472909535,
+  "estimated_training_steps_per_second": 34.626102443225875,
+  "measured_steps": 1000,
+  "measured_updates": 10,
+  "minibatch_size": 64,
+  "rollout_steps": 128,
+  "step_loop_wall_clock_seconds": 17.593913374934345,
+  "timings": {
+    "env_reset": {
+      "count": 20,
+      "mean_ms": 20.098977047018707,
+      "median_ms": 18.426812370307744,
+      "p90_ms": 29.67950003221631
+    },
+    "env_step": {
+      "count": 1000,
+      "mean_ms": 15.515167411416769,
+      "median_ms": 13.368083513341844,
+      "p90_ms": 20.852367370389402
+    },
+    "policy_forward": {
+      "count": 1000,
+      "mean_ms": 1.5091472212225199,
+      "median_ms": 1.207686960697174,
+      "p90_ms": 2.0267041632905607
+    },
+    "ppo_update": {
+      "count": 10,
+      "mean_ms": 1473.2182126259431,
+      "median_ms": 1444.612291525118,
+      "p90_ms": 1578.4729797858745
+    }
+  },
+  "update_epochs": 4,
+  "warmup_steps": 20,
+  "warmup_updates": 1,
+  "what_was_timed": "Time the three parts of a training step on the live JavaFX bridge."
+}
