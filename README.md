@@ -208,6 +208,18 @@ Add `--results-root results` to also write a small committed summary
 (`summary.json`, `episodes.csv`, `provenance.json`) to
 `results/<date>-<device>-<run>/`. See [results/README.md](results/README.md).
 
+### Baselines
+
+`tetris_rl.training.baselines` evaluates three non-learning policies on the same
+held-out seeds and writes the same summary format: `random` (uniform over the
+actions, seeded per episode), `noop` (no key presses), and `hard_drop` (space
+every step). None of them look at the screen.
+
+```bash
+PYTHONPATH=src python -m tetris_rl.training.baselines \
+  --config configs/visual/reference_ppo.yaml --results-root results
+```
+
 ### Run provenance
 
 `provenance.json` records the outer repository commit and whether the working
