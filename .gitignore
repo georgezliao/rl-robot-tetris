@@ -5,7 +5,12 @@ __pycache__/
 .venv/
 dist/
 build/
+target/
 *.egg-info/
+experiments/records/
+experiments/stability/
+experiments/training/
+experiments/evaluation/
 experiments/*/checkpoints/
 experiments/*/videos/
 experiments/*/logs/
@@ -15,3 +20,12 @@ runs/
 .DS_Store
 .idea/
 .vscode/
+
+# Local research planning; this file may contain provisional experiment designs.
+/planning/VISUAL_RL_EXPERIMENT_PLAN.md
+
+# Local AI-agent guidance and task workflows.
+/AGENTS.md
+/CLAUDE.md
+/.context/
+/.agents/
