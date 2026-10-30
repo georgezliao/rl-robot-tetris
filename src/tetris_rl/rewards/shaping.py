@@ -25,8 +25,7 @@ def shaped_reward(
     return (
         weights.line_clear * transition.lines_cleared
         + weights.holes * (after.holes - before.holes)
-        + weights.aggregate_height
-        * (after.aggregate_height - before.aggregate_height)
+        + weights.aggregate_height * (after.aggregate_height - before.aggregate_height)
         + weights.bumpiness * (after.bumpiness - before.bumpiness)
         + weights.game_over * float(transition.game_over)
     )

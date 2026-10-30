@@ -9,7 +9,7 @@ import subprocess
 from collections import deque
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 
@@ -47,6 +47,8 @@ class JavaFxControlEnv:
         self.frame_stack = frame_stack
         self._frames: deque[Observation] = deque(maxlen=frame_stack)
         self._process: subprocess.Popen[str] | None = None
+        self._episode_active = False
+        self._done = False
 
     def reset(self, seed: int | None = None) -> Observation:
         self._ensure_started()
@@ -54,12 +56,18 @@ class JavaFxControlEnv:
         frame = self._decode_frame(payload)
         self._frames.clear()
         self._frames.extend(frame.copy() for _ in range(self.frame_stack))
+        self._episode_active = True
+        self._done = False
         return self._stacked_observation()
 
     def step(self, action: ControlAction | int) -> StepResult:
         action_id = int(action)
         if action_id not in {member.value for member in ControlAction}:
             raise ValueError(f"Unknown control action: {action_id}")
+        if not self._episode_active:
+            raise RuntimeError("Call reset() before step()")
+        if self._done:
+            raise RuntimeError("Episode is terminal; call reset() before step()")
 
         self._ensure_started()
         payload = self._request(f"STEP {action_id}")
@@ -67,12 +75,15 @@ class JavaFxControlEnv:
         observation = self._stacked_observation()
         reward = float(payload["reward"])
         done = bool(payload["done"])
+        self._done = done
         info = self._info(payload)
         return observation, reward, done, info
 
     def close(self) -> None:
         process = self._process
         self._process = None
+        self._episode_active = False
+        self._done = False
         if process is None or process.poll() is not None:
             return
 
@@ -89,7 +100,7 @@ class JavaFxControlEnv:
                 process.kill()
                 process.wait()
 
-    def __enter__(self) -> JavaFxControlEnv:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -138,7 +149,9 @@ class JavaFxControlEnv:
             process.stdin.write(command + "\n")
             process.stdin.flush()
         except BrokenPipeError as exception:
-            raise BridgeError(f"Java bridge stopped. {self._read_error()}") from exception
+            raise BridgeError(
+                f"Java bridge stopped. {self._read_error()}"
+            ) from exception
 
         response = process.stdout.readline()
         if not response:
@@ -164,7 +177,9 @@ class JavaFxControlEnv:
         if not isinstance(observation, dict):
             raise BridgeError("Bridge response is missing a visual observation")
         if observation.get("encoding") != "rgb24-base64":
-            raise BridgeError(f"Unsupported frame encoding: {observation.get('encoding')}")
+            raise BridgeError(
+                f"Unsupported frame encoding: {observation.get('encoding')}"
+            )
 
         try:
             width = int(observation["width"])
@@ -175,9 +190,7 @@ class JavaFxControlEnv:
             raise BridgeError("Malformed visual observation") from exception
 
         if width < 1 or height < 1 or channels != 3:
-            raise BridgeError(
-                f"Invalid visual dimensions: {width}x{height}x{channels}"
-            )
+            raise BridgeError(f"Invalid visual dimensions: {width}x{height}x{channels}")
         expected_bytes = width * height * channels
         if len(raw) != expected_bytes:
             raise BridgeError(

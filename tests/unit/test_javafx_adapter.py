@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from tetris_rl.envs.javafx import BridgeError, JavaFxControlEnv
+from tetris_rl.types import ControlAction
 
 
 def visual_payload(frame: np.ndarray) -> dict[str, object]:
@@ -39,3 +40,10 @@ def test_observation_rejects_wrong_byte_count() -> None:
 
     with pytest.raises(BridgeError):
         env._decode_frame(payload)
+
+
+def test_step_requires_reset_without_starting_bridge() -> None:
+    env = JavaFxControlEnv()
+
+    with pytest.raises(RuntimeError, match="reset"):
+        env.step(ControlAction.NOOP)
