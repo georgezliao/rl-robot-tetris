@@ -106,7 +106,8 @@ calls three functions:
    boundary, plus `final.pt` at the end.
 
 Run outputs go to `experiments/training/<name>-<timestamp>/`
-(`resolved_config.json`, `metrics.jsonl`, `summary.json`, `checkpoints/`).
+(`resolved_config.json`, `provenance.json`, `metrics.jsonl`, `summary.json`,
+`checkpoints/`). `training/provenance.py` builds the provenance record.
 
 `validate_runtime_support` rejects configuration values the trainer does not
 implement yet (other regions, grayscale, macro actions, more than one gravity
@@ -119,7 +120,7 @@ observation, action, model and reward settings match the requested config.
 `evaluate_loaded_policy` then plays `evaluation.episodes` episodes on seeds
 starting at `evaluation.first_seed`, chooses actions deterministically, and
 writes per-episode manifests and JSONL step records (via `events/`) plus
-`episodes.json` and `summary.json`. It hashes the model parameters before and
+`episodes.json`, `summary.json` and `provenance.json`. It hashes the model parameters before and
 after and fails if they changed. Episodes that hit `max_steps_per_episode` are
 marked truncated rather than terminal.
 

@@ -33,7 +33,9 @@ def main() -> None:
         print(json.dumps(experiment_summary(config), indent=2, sort_keys=True))
         return
     result = train_visual_agent(
-        config, environment_steps_override=args.environment_steps
+        config,
+        environment_steps_override=args.environment_steps,
+        config_path=args.config,
     )
     print(
         json.dumps(

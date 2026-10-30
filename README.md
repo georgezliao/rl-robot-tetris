@@ -167,7 +167,7 @@ PYTHONPATH=src python -m tetris_rl.training.train \
 ```
 
 Each run writes its resolved configuration, update and episode metrics, summary,
-and checkpoints under `experiments/training/`. That directory is ignored by Git.
+checkpoints, and `provenance.json` under `experiments/training/`. That directory is ignored by Git.
 The step override is intended for bounded diagnostics; an eight-step run does
 not provide evidence of policy improvement. The planned visual-agent ablation
 configurations remain to be implemented.
@@ -195,12 +195,23 @@ PYTHONPATH=src python -m tetris_rl.training.evaluate \
 ```
 
 Each evaluation writes generic episode manifests and JSONL step records,
-per-episode results, `episodes.json`, and `summary.json` under
-`experiments/evaluation/`. Aggregate output includes lines, score, pieces,
+per-episode results, `episodes.json`, `summary.json`, and `provenance.json`
+under `experiments/evaluation/`. Aggregate output includes lines, score, pieces,
 survival in pieces, and lines per 100 pieces. An episode that reaches the step
 limit is marked as truncated rather than terminal. Lines per 100 pieces is stored
 as `null` when no pieces were placed. The evaluator hashes model parameters
 before and after execution and fails if they change.
+
+### Run provenance
+
+`provenance.json` records the outer repository commit and whether the working
+tree had uncommitted changes, the same for the nested `tetris/` repository, the
+config path, the seed ranges, the device (type and CPU or GPU model), the OS,
+and the Python, PyTorch, NumPy and Java versions. The Java version comes from
+the JDK that `scripts/java_home.sh` selects, which is the one the bridge
+scripts use. Evaluation also records the checkpoint path, its SHA-256, and its
+training step count. Compare results only when these match or the differences
+are stated.
 
 ## Episode records and replay
 

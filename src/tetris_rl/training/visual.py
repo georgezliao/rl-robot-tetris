@@ -26,6 +26,7 @@ from tetris_rl.training.ppo import (
     generalized_advantage_estimates,
     ppo_update,
 )
+from tetris_rl.training.provenance import collect_provenance
 from tetris_rl.types import ControlAction
 
 
@@ -344,13 +345,16 @@ def train_visual_agent(
     config: VisualExperimentConfig,
     *,
     environment_steps_override: int | None = None,
+    config_path: Path | None = None,
 ) -> TrainingResult:
     """Train the reference PPO policy for a finite number of UI interactions.
 
     Each iteration collects one rollout, updates the policy on it, and logs the
     finished episodes and update metrics to ``metrics.jsonl``. A checkpoint is
     saved after the first update at or past each ``checkpoint_interval``
-    boundary, and ``final.pt`` at the end.
+    boundary, and ``final.pt`` at the end. ``provenance.json`` records the
+    commits, seeds, device and software versions; pass ``config_path`` so it
+    also names the configuration file.
     """
     validate_runtime_support(config)
     requested_steps = (
@@ -377,6 +381,20 @@ def train_visual_agent(
         actions=actions,
         device=device,
         model=model,
+    )
+    write_json(
+        run_directory / "provenance.json",
+        collect_provenance(
+            config_path=config_path,
+            seeds={
+                "training_first_seed": config.seed,
+                "evaluation_seeds": [
+                    config.evaluation.seeds.start,
+                    config.evaluation.seeds.stop - 1,
+                ],
+            },
+            device=device,
+        ),
     )
     checkpoint_directory = run_directory / "checkpoints"
     metrics_path = run_directory / "metrics.jsonl"

@@ -22,6 +22,7 @@ from tetris_rl.events.schema import EpisodeManifest, JsonScalar, StepEvent
 from tetris_rl.models.cnn_policy import VisualActorCritic
 from tetris_rl.training.config import VisualExperimentConfig, load_visual_config
 from tetris_rl.training.io_utils import observation_to_tensor, write_json
+from tetris_rl.training.provenance import collect_provenance
 from tetris_rl.training.visual import (
     action_set,
     resolve_device,
@@ -258,8 +259,13 @@ def evaluate_loaded_policy(
     output_root: Path,
     episode_count: int,
     max_steps_per_episode: int,
+    provenance: Mapping[str, Any] | None = None,
 ) -> EvaluationResult:
-    """Evaluate an already loaded policy and write generic episode records."""
+    """Evaluate an already loaded policy and write generic episode records.
+
+    ``provenance`` (see ``collect_provenance``) is written to
+    ``provenance.json`` in the run directory when given.
+    """
     if episode_count < 1 or max_steps_per_episode < 1:
         raise ValueError("episode_count and max_steps_per_episode must be positive")
     actions = action_set(config)
@@ -271,6 +277,8 @@ def evaluate_loaded_policy(
     run_directory = output_root / f"{config.name}-{run_id}"
     episode_root = run_directory / "episodes"
     episode_root.mkdir(parents=True)
+    if provenance is not None:
+        write_json(run_directory / "provenance.json", provenance)
     seeds = tuple(
         config.evaluation.first_seed + index for index in range(episode_count)
     )
@@ -430,6 +438,21 @@ def main() -> None:
             output_root=output_root,
             episode_count=episode_count,
             max_steps_per_episode=max_steps,
+            provenance=collect_provenance(
+                config_path=args.config,
+                seeds={
+                    "evaluation_seeds": [
+                        config.evaluation.first_seed,
+                        config.evaluation.first_seed + episode_count - 1,
+                    ],
+                },
+                device=next(loaded.model.parameters()).device,
+                extra={
+                    "checkpoint_path": str(args.checkpoint),
+                    "checkpoint_sha256": loaded.sha256,
+                    "checkpoint_environment_steps": loaded.environment_steps,
+                },
+            ),
         )
     print(
         json.dumps(
