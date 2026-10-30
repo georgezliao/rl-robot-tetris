@@ -14,7 +14,6 @@ from typing import Any, Protocol
 
 import numpy as np
 import torch
-from torch import Tensor
 
 from tetris_rl.envs.javafx import JavaFxControlEnv
 from tetris_rl.events.observations import observation_sha256
@@ -22,6 +21,7 @@ from tetris_rl.events.recorder import EpisodeRecorder
 from tetris_rl.events.schema import EpisodeManifest, JsonScalar, StepEvent
 from tetris_rl.models.cnn_policy import VisualActorCritic
 from tetris_rl.training.config import VisualExperimentConfig, load_visual_config
+from tetris_rl.training.io_utils import observation_to_tensor, write_json
 from tetris_rl.training.visual import (
     action_set,
     resolve_device,
@@ -195,10 +195,6 @@ def _validate_observation(
         raise RuntimeError("Observation values must lie in [0, 1]")
 
 
-def _tensor_observation(observation: np.ndarray, device: torch.device) -> Tensor:
-    return torch.from_numpy(np.ascontiguousarray(observation)).unsqueeze(0).to(device)
-
-
 def _scalar_metrics(info: Mapping[str, object]) -> dict[str, JsonScalar]:
     metrics: dict[str, JsonScalar] = {}
     for key, value in info.items():
@@ -216,12 +212,6 @@ def _integer_metric(info: Mapping[str, object], name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"Expected integer metric {name!r}, got {value!r}")
     return value
-
-
-def _write_json(path: Path, value: object) -> None:
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(value, handle, indent=2, sort_keys=True, allow_nan=False)
-        handle.write("\n")
 
 
 def _aggregate(
@@ -322,7 +312,7 @@ def evaluate_loaded_policy(
 
         with EpisodeRecorder(recording_directory, manifest) as recorder:
             for step_index in range(max_steps_per_episode):
-                observation_tensor = _tensor_observation(observation, device)
+                observation_tensor = observation_to_tensor(observation, device)
                 with torch.inference_mode():
                     distribution, value = loaded.model.distribution_and_value(
                         observation_tensor
@@ -374,7 +364,7 @@ def evaluate_loaded_policy(
             recording_directory=str(recording_directory),
         )
         results.append(episode_result)
-        _write_json(recording_directory / "result.json", asdict(episode_result))
+        write_json(recording_directory / "result.json", asdict(episode_result))
 
     parameter_digest_after = _model_state_sha256(loaded.model)
     parameters_unchanged = parameter_digest_before == parameter_digest_after
@@ -387,8 +377,8 @@ def evaluate_loaded_policy(
         max_steps_per_episode=max_steps_per_episode,
         parameters_unchanged=parameters_unchanged,
     )
-    _write_json(run_directory / "episodes.json", [asdict(item) for item in results])
-    _write_json(run_directory / "summary.json", summary)
+    write_json(run_directory / "episodes.json", [asdict(item) for item in results])
+    write_json(run_directory / "summary.json", summary)
     return EvaluationResult(run_directory, tuple(results), summary)
 
 

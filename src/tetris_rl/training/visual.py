@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import random
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,6 +15,11 @@ from torch import Tensor
 from tetris_rl.envs.javafx import JavaFxControlEnv
 from tetris_rl.models.cnn_policy import VisualActorCritic
 from tetris_rl.training.config import VisualExperimentConfig
+from tetris_rl.training.io_utils import (
+    append_jsonl,
+    observation_to_tensor,
+    write_json,
+)
 from tetris_rl.training.ppo import (
     generalized_advantage_estimates,
     ppo_update,
@@ -94,21 +98,6 @@ def experiment_summary(config: VisualExperimentConfig) -> dict[str, Any]:
     }
 
 
-def _tensor_observation(observation: np.ndarray, device: torch.device) -> Tensor:
-    return torch.from_numpy(np.ascontiguousarray(observation)).unsqueeze(0).to(device)
-
-
-def _write_json(path: Path, value: dict[str, Any]) -> None:
-    path.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-
-
-def _append_jsonl(path: Path, value: dict[str, Any]) -> None:
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(value, sort_keys=True) + "\n")
-
-
 def _checkpoint(
     path: Path,
     model: VisualActorCritic,
@@ -157,7 +146,7 @@ def train_visual_agent(
     run_directory = config.training.output_directory / f"{config.name}-{run_id}"
     checkpoint_directory = run_directory / "checkpoints"
     checkpoint_directory.mkdir(parents=True)
-    _write_json(
+    write_json(
         run_directory / "resolved_config.json",
         {
             **config.to_dict(),
@@ -195,7 +184,7 @@ def train_visual_agent(
 
             model.eval()
             for _ in range(rollout_length):
-                observation_tensor = _tensor_observation(observation, device)
+                observation_tensor = observation_to_tensor(observation, device)
                 policy_action, log_probability, value = model.act(observation_tensor)
                 action_index = int(policy_action.item())
                 next_observation, raw_reward, done, info = environment.step(
@@ -214,7 +203,7 @@ def train_visual_agent(
                 episode_return += reward
 
                 if done:
-                    _append_jsonl(
+                    append_jsonl(
                         metrics_path,
                         {
                             "type": "episode",
@@ -241,7 +230,7 @@ def train_visual_agent(
                 if dones[-1]:
                     next_value = torch.zeros((), device=device)
                 else:
-                    _, next_values = model(_tensor_observation(observation, device))
+                    _, next_values = model(observation_to_tensor(observation, device))
                     next_value = next_values.squeeze(0)
 
             observation_batch = torch.stack(observations)
@@ -269,7 +258,7 @@ def train_visual_agent(
                 config.algorithm,
             )
             updates += 1
-            _append_jsonl(
+            append_jsonl(
                 metrics_path,
                 {
                     "type": "update",
@@ -294,7 +283,7 @@ def train_visual_agent(
                     next_checkpoint += config.training.checkpoint_interval
 
     _checkpoint(checkpoint_directory / "final.pt", model, optimizer, steps_done, config)
-    _write_json(
+    write_json(
         run_directory / "summary.json",
         {
             "environment_steps": steps_done,
