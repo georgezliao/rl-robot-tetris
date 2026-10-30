@@ -18,22 +18,26 @@ reward choices can be varied independently.
 ## Layout
 
 ```text
-configs/                 Experiment configuration
-experiments/             Saved run metadata (large outputs are ignored)
+tetris/                  Original JavaFX game and RlBridge.java (nested repo)
+configs/                 Experiment configuration (visual/ is the live one)
+docs/                    Architecture notes
+experiments/             Run outputs (ignored by Git)
 notebooks/               Exploration and result analysis
-scripts/                 Command-line entry points
+scripts/                 Bridge, recording, replay, and stability commands
 src/tetris_rl/
-  core/                  Board, pieces, randomizer, and game rules
-  envs/                  RL API and the two action-mode environments
-  observations/          Rendered-pixel, raw-grid, and feature encoders
-  rewards/               Sparse and shaped reward definitions
-  agents/                Random, deep-RL, and heuristic policies
-  search/                Beam-search and MCTS baselines
-  training/              Training, evaluation, and metrics orchestration
+  envs/javafx.py         JavaFxControlEnv: the environment the agent uses
+  models/                CNN encoder and actor-critic policy
+  training/              Config, PPO, training loop, and checkpoint evaluation
+  events/                Episode manifest and step-record format
+  core/, envs/control.py, envs/placement.py, observations/, rewards/,
+  agents/, search/       Placeholders for the planned comparison conditions
 tests/
-  unit/                  Rules, encoders, and reward tests
-  integration/           Environment contract and reproducibility tests
+  unit/                  Core board/features, config, policy, PPO, evaluation, records
+  integration/           Environment contract tests
 ```
+
+[docs/architecture.md](docs/architecture.md) follows one decision from the
+JavaFX bridge to a saved checkpoint and lists which modules are placeholders.
 
 ## Environment contract
 
