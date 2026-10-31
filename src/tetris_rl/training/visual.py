@@ -92,6 +92,7 @@ def experiment_summary(config: VisualExperimentConfig) -> dict[str, Any]:
     device = resolve_device(config.training.device)
     return {
         "name": config.name,
+        "seed": config.seed,
         "observation_shape": list(config.observation.shape),
         "actions": [action.name for action in actions],
         "device": str(device),
@@ -307,7 +308,9 @@ def _create_run_directory(
 ) -> Path:
     """Create ``<output>/<name>-<UTC time>/checkpoints`` and the resolved config."""
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
-    run_directory = config.training.output_directory / f"{config.name}-{run_id}"
+    run_directory = (
+        config.training.output_directory / f"{config.name}-seed{config.seed}-{run_id}"
+    )
     (run_directory / "checkpoints").mkdir(parents=True)
     write_json(
         run_directory / "resolved_config.json",
@@ -346,6 +349,7 @@ def train_visual_agent(
     *,
     environment_steps_override: int | None = None,
     config_path: Path | None = None,
+    cli_overrides: dict[str, Any] | None = None,
 ) -> TrainingResult:
     """Train the reference PPO policy for a finite number of UI interactions.
 
@@ -354,7 +358,8 @@ def train_visual_agent(
     saved after the first update at or past each ``checkpoint_interval``
     boundary, and ``final.pt`` at the end. ``provenance.json`` records the
     commits, seeds, device and software versions; pass ``config_path`` so it
-    also names the configuration file.
+    also names the configuration file, and ``cli_overrides`` so it lists any
+    values (seed, device, step count) that differ from that file.
     """
     validate_runtime_support(config)
     requested_steps = (
@@ -394,6 +399,7 @@ def train_visual_agent(
                 ],
             },
             device=device,
+            extra={"cli_overrides": cli_overrides or {}},
         ),
     )
     checkpoint_directory = run_directory / "checkpoints"

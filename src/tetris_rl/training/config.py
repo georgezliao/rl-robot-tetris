@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+DEVICES = frozenset({"cpu", "mps", "cuda", "auto"})
 
 
 class ConfigurationError(ValueError):
@@ -145,6 +147,30 @@ class VisualExperimentConfig:
     reward: RewardConfig
     training: TrainingConfig
     evaluation: EvaluationConfig
+
+    def with_overrides(
+        self, *, seed: int | None = None, device: str | None = None
+    ) -> VisualExperimentConfig:
+        """Return a copy with the training seed and/or device replaced.
+
+        These are the two values that change between runs of one condition
+        (independent training seeds, or the machine's accelerator). Everything
+        else must come from the configuration file.
+        """
+        updated = self
+        if seed is not None:
+            if isinstance(seed, bool) or not isinstance(seed, int):
+                raise ConfigurationError("seed must be an integer")
+            updated = replace(updated, seed=seed)
+        if device is not None:
+            if device not in DEVICES:
+                raise ConfigurationError(
+                    "training.device must be cpu, mps, cuda, or auto"
+                )
+            updated = replace(
+                updated, training=replace(updated.training, device=device)
+            )
+        return updated
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -336,7 +362,7 @@ def load_visual_config(path: Path | str) -> VisualExperimentConfig:
             "device",
         },
     )
-    if training_raw["device"] not in {"cpu", "mps", "cuda", "auto"}:
+    if training_raw["device"] not in DEVICES:
         raise ConfigurationError("training.device must be cpu, mps, cuda, or auto")
     if (
         not isinstance(training_raw["output_directory"], str)

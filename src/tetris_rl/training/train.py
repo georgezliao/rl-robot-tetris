@@ -21,12 +21,33 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="override the configured step count for a bounded diagnostic run",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="training seed; episode i uses seed + i (for independent runs)",
+    )
+    parser.add_argument(
+        "--device",
+        choices=["cpu", "mps", "cuda", "auto"],
+        help="override training.device",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    config = load_visual_config(args.config)
+    config = load_visual_config(args.config).with_overrides(
+        seed=args.seed, device=args.device
+    )
+    overrides = {
+        name: value
+        for name, value in {
+            "seed": args.seed,
+            "device": args.device,
+            "environment_steps": args.environment_steps,
+        }.items()
+        if value is not None
+    }
     if args.dry_run:
         if args.environment_steps is not None:
             raise SystemExit("--environment-steps has no effect with --dry-run")
@@ -36,6 +57,7 @@ def main() -> None:
         config,
         environment_steps_override=args.environment_steps,
         config_path=args.config,
+        cli_overrides=overrides,
     )
     print(
         json.dumps(

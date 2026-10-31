@@ -15,7 +15,9 @@ the stable reference.
 Python's `random`, NumPy and PyTorch with `seed` (42). It then builds
 `VisualActorCritic` and an Adam optimizer (`algorithm.learning_rate`, 2.5e-4),
 writes `resolved_config.json` and `provenance.json`, and resets the bridge on
-seed 42.
+seed 42. `--seed` and `--device` on the command line replace `seed` and
+`training.device` (`VisualExperimentConfig.with_overrides`). Run directories are
+named `<name>-seed<seed>-<UTC time>`.
 
 PyTorch's global random generator is used both for sampling actions and for
 shuffling minibatches. Any change that draws extra random numbers, such as an

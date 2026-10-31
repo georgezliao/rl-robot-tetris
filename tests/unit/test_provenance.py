@@ -9,7 +9,7 @@ import torch
 import yaml
 
 from tetris_rl.training import visual
-from tetris_rl.training.config import load_visual_config
+from tetris_rl.training.config import ConfigurationError, load_visual_config
 from tetris_rl.training.provenance import collect_provenance, git_state
 
 REFERENCE_CONFIG = Path("configs/visual/reference_ppo.yaml")
@@ -97,9 +97,7 @@ class FakeJavaFxEnv:
         return np.zeros(self.shape, dtype=np.float32), 0.0, self.steps == 3, {}
 
 
-def test_training_run_writes_provenance(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def tiny_config_path(tmp_path: Path) -> Path:
     raw = yaml.safe_load(REFERENCE_CONFIG.read_text(encoding="utf-8"))
     raw["observation"].update(height=36, width=36, frame_stack=1)
     raw["model"]["feature_dim"] = 8
@@ -109,10 +107,19 @@ def test_training_run_writes_provenance(
     )
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    return config_path
+
+
+def test_training_run_writes_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tiny_config_path(tmp_path)
     monkeypatch.setattr(visual, "JavaFxControlEnv", FakeJavaFxEnv)
 
     result = visual.train_visual_agent(
-        load_visual_config(config_path), config_path=config_path
+        load_visual_config(config_path),
+        config_path=config_path,
+        cli_overrides={"seed": 42},
     )
 
     record = json.loads((result.run_directory / "provenance.json").read_text())
@@ -121,3 +128,43 @@ def test_training_run_writes_provenance(
         "training_first_seed": 42,
         "evaluation_seeds": [10000, 10099],
     }
+    assert record["extra"] == {"cli_overrides": {"seed": 42}}
+
+
+def test_seed_override_reaches_episode_seeds_and_run_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = load_visual_config(tiny_config_path(tmp_path)).with_overrides(
+        seed=500, device="cpu"
+    )
+    monkeypatch.setattr(visual, "JavaFxControlEnv", FakeJavaFxEnv)
+
+    result = visual.train_visual_agent(config)
+
+    assert "-seed500-" in result.run_directory.name
+    first_episode = json.loads(
+        (result.run_directory / "metrics.jsonl").read_text().splitlines()[0]
+    )
+    assert first_episode["seed"] == 500
+    resolved = json.loads((result.run_directory / "resolved_config.json").read_text())
+    assert resolved["seed"] == 500
+
+
+def test_seed_override_still_stops_before_evaluation_seeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Episode 0 uses seed 9999; the reset after it would be 10000, the first
+    # evaluation seed of the reference config.
+    config = load_visual_config(tiny_config_path(tmp_path)).with_overrides(seed=9999)
+    monkeypatch.setattr(visual, "JavaFxControlEnv", FakeJavaFxEnv)
+
+    with pytest.raises(visual.SeedCollisionError):
+        visual.train_visual_agent(config)
+
+
+def test_with_overrides_rejects_unknown_device(tmp_path: Path) -> None:
+    config = load_visual_config(tiny_config_path(tmp_path))
+
+    with pytest.raises(ConfigurationError):
+        config.with_overrides(device="tpu")
+    assert config.with_overrides() == config

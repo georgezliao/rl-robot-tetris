@@ -182,6 +182,16 @@ PYTHONPATH=src python -m tetris_rl.training.train \
   --config configs/visual/reference_ppo.yaml --environment-steps 8
 ```
 
+Independent runs of one condition share a config file and differ only in
+`--seed` (episode `i` uses piece seed `seed + i`). `--device` overrides
+`training.device`. Both overrides are recorded in `resolved_config.json` and
+`provenance.json`, and the seed is part of the run directory name:
+
+```bash
+TETRIS_BRIDGE_OFFSCREEN=1 PYTHONPATH=src python -m tetris_rl.training.train \
+  --config configs/visual/reference_ppo_terminal.yaml --seed 100000 --device mps
+```
+
 Each run writes its resolved configuration, update and episode metrics, summary,
 checkpoints, and `provenance.json` under `experiments/training/`. That directory is ignored by Git.
 The step override is intended for bounded diagnostics; an eight-step run does
