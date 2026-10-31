@@ -27,6 +27,19 @@ PYTHONPATH=src python -m tetris_rl.training.evaluate \
   --results-root results
 ```
 
+To get a learning curve for a training run, evaluate all of its checkpoints:
+
+```bash
+TETRIS_BRIDGE_OFFSCREEN=1 PYTHONPATH=src python -m tetris_rl.training.sweep \
+  --config configs/visual/reference_ppo_terminal.yaml \
+  --run-directory experiments/training/<run>
+```
+
+This writes `results/<date>-<device>-curve-<run>/learning_curve.csv` (one row
+per checkpoint: steps, mean survival, lines per 100 pieces, mean lines) and
+`provenance.json`. The curve shows progress during training. The reported
+result is `final.pt`, not the best point on the curve.
+
 A run made with `--episodes` or `--max-steps-per-episode` overrides is a
 diagnostic; its `summary.json` records the seeds and step limit actually used.
 Check `provenance.json` before comparing two directories: results from
