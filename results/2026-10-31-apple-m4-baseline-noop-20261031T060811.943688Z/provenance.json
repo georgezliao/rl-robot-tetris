@@ -1,0 +1,37 @@
+{
+  "config_path": "configs/visual/reference_ppo_terminal.yaml",
+  "created_utc": "2026-10-31T06:08:11.702981+00:00",
+  "device": {
+    "description": "Apple M4",
+    "type": "cpu"
+  },
+  "extra": {
+    "policy": "baseline:noop"
+  },
+  "platform": {
+    "machine": "arm64",
+    "release": "25.0.0",
+    "system": "Darwin"
+  },
+  "repository": {
+    "commit": "2aabf77812aac59df3660c9537bdbe65e6aac43e",
+    "dirty": true
+  },
+  "schema_version": 1,
+  "seeds": {
+    "evaluation_seeds": [
+      1000000,
+      1000099
+    ]
+  },
+  "tetris": {
+    "commit": "d868ec7aa8441b98c80b6d383f3a9cc971ec7881",
+    "dirty": true
+  },
+  "versions": {
+    "java": "openjdk version \"1.8.0_345\"",
+    "numpy": "2.5.4",
+    "python": "3.14.0",
+    "torch": "2.14.1"
+  }
+}
