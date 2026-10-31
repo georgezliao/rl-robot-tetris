@@ -46,8 +46,11 @@ advances between agent decisions. Diagnostics go to stderr so stdout stays
 machine-readable.
 
 `scripts/run_java_bridge.sh` builds the Java sources into `build/java` and
-starts `tetris.RlBridge` with a JavaFX-capable JDK (`JAVAFX_JAVA_HOME`, or the
-Liberica Java 8 JDK on macOS).
+starts `tetris.RlBridge` with the JDK chosen by `scripts/java_home.sh`
+(`JAVAFX_JAVA_HOME`, or the Liberica Java 8 JDK on macOS). With
+`TETRIS_BRIDGE_OFFSCREEN=1` it passes `-Dtetris.bridge.offscreen=true`, and the
+bridge moves its window off the visible desktop after each `show()`. The window
+still exists, because snapshots need a live scene, but it stays out of the way.
 
 ### 2. The environment (`envs/javafx.py`)
 

@@ -121,6 +121,12 @@ but those counters are not added to the agent's pixel observation. The available
 actions exactly match the existing UI: no-op, left, right, rotate, down, space,
 and `C` for hold.
 
+The bridge opens a game window, because JavaFX on this JDK has no headless
+mode. Set `TETRIS_BRIDGE_OFFSCREEN=1` to place that window outside the visible
+desktop. Frames are rendered from the scene graph with `Node.snapshot()`, not
+captured from the screen, and replaying recorded episodes gives identical
+observation digests with and without the flag.
+
 On macOS the scripts automatically use the installed Liberica Java 8 JDK. Set
 `JAVAFX_JAVA_HOME` when JavaFX is installed under a different JDK.
 
